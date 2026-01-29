@@ -1,0 +1,60 @@
+name: Esegui Backtester Notebook (Papermill)
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_branch:
+        description: "Branch da cui eseguire e su cui committare"
+        required: true
+        default: "main"
+        type: string
+      start_date:
+        description: "Data inizio backtest (YYYY-MM-DD)"
+        required: false
+        default: "2020-01-01"
+        type: string
+      end_date:
+        description: "Data fine backtest (YYYY-MM-DD)"
+        required: false
+        default: "2025-12-31"
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  run-notebook:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.target_branch }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps (papermill & jupyter)
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+          pip install papermill jupyter pandas numpy matplotlib
+
+      - name: Esegui notebook con parametri
+        run: |
+          papermill Backtester.ipynb Backtester-executed.ipynb \
+            -p start_date "${{ inputs.start_date }}" \
+            -p end_date "${{ inputs.end_date }}"
+
+      - name: Commit & push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Backtester-executed.ipynb || true
+          git add data/*.csv || true
+          git diff --cached --quiet || git commit -m "Output backtest (papermill)"
+          git push origin "HEAD:${{ inputs.target_branch }}"
